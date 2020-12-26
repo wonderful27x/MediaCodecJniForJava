@@ -6,12 +6,10 @@
 
 #include <stdint.h>
 #include <jni.h>
-#include "androidlog.h"
 
-extern "C"{
+#include "androidlog.h"
 #include "libmcw.h"
 #include "mcw_jni.h"
-}
 
 /**
  * @author wonderful

@@ -33,9 +33,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define ULOG_TAG libmcw
 #include "androidlog.h"
-
 #include "libmcw.h"
 
 
