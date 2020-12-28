@@ -3,10 +3,6 @@ package com.example.mediacodecjava;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import android.Manifest;
-import android.media.MediaCodec;
-import android.media.MediaExtractor;
-import android.media.MediaFormat;
-import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
@@ -18,12 +14,6 @@ import android.widget.Button;
 import com.wonderful.permissionlibrary.annotation.PermissionCheck;
 import com.wonderful.permissionlibrary.annotation.PermissionResult;
 
-import java.io.EOFException;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-
-import javax.microedition.khronos.egl.EGLConfig;
-import javax.microedition.khronos.opengles.GL10;
 
 public class MainActivity extends AppCompatActivity{
 
@@ -41,14 +31,12 @@ public class MainActivity extends AppCompatActivity{
 
     private SurfaceView surfaceViewJni;
     private Button playJni;
-    private Surface surfaceJni;
 
-    private String path = Environment.getExternalStorageDirectory() + "/wonderful/demo.mp4";
+    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/demo.mp4";
     //private String path = Environment.getExternalStorageDirectory() + "/wonderful/LoveStory.mp4";
     //private String path = Environment.getExternalStorageDirectory() + "/wonderful/4kTest4.mp4";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/video-h265.mkv";
+    private String path = Environment.getExternalStorageDirectory() + "/wonderful/video-h265.mkv";
     //private String path = Environment.getExternalStorageDirectory() + "/wonderful/4k360.mp4";
-    //private String path = Environment.getExternalStorageDirectory() + "/cybervr/res/4kTest4.mp4";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,7 +56,7 @@ public class MainActivity extends AppCompatActivity{
             @Override
             public void surfaceChanged(@NonNull SurfaceHolder holder, int format, int width, int height) {
                 if (playerThread == null){
-                    playerThread = new PlayerThread(holder.getSurface());
+                    playerThread = new PlayerThread();
                 }
             }
 
@@ -90,26 +78,10 @@ public class MainActivity extends AppCompatActivity{
 
         surfaceViewJni = findViewById(R.id.surfaceJni);
         playJni = findViewById(R.id.playJni);
-        surfaceViewJni.getHolder().addCallback(new SurfaceHolder.Callback() {
-            @Override
-            public void surfaceCreated(@NonNull SurfaceHolder holder) {
-
-            }
-
-            @Override
-            public void surfaceChanged(@NonNull SurfaceHolder holder, int format, int width, int height) {
-                surfaceJni = holder.getSurface();
-            }
-
-            @Override
-            public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
-
-            }
-        });
         playJni.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                playVideoThread(surfaceJni,path);
+                playVideoThread(surfaceViewJni.getHolder().getSurface(),path);
             }
         });
     }
@@ -117,15 +89,9 @@ public class MainActivity extends AppCompatActivity{
 
     class PlayerThread extends Thread{
 
-        private Surface surface;
-
-        public PlayerThread(Surface surface){
-            this.surface = surface;
-        }
-
         @Override
         public void run() {
-            playVideo(surface,path);
+            playVideo(surfaceView.getHolder().getSurface(),path);
         }
     }
 

@@ -2352,7 +2352,7 @@ void mcw_jni_mediaExtractor_set_data_source(mcw_mediaExtractor* extractor,const 
 			mcw_jni.MediaExtractor.setDataSource,
 			sourcePath);
 
-	//todo no sure if right
+	//todo no sure if right,how to release the jstring sourcePath ???
 	//env->ReleaseStringUTFChars(sourcePath,path);
 
 	if (env->ExceptionCheck()) {
@@ -2493,6 +2493,9 @@ size_t mcw_jni_mediaExtractor_read_sample_data(mcw_mediaExtractor* extractor,uin
 			0);
 
 	//todo if should release inputBuffer ???
+	if (inputBuffer){
+		env->DeleteLocalRef(inputBuffer);
+	}
 
 	if (env->ExceptionCheck()) {
 		env->ExceptionDescribe();
