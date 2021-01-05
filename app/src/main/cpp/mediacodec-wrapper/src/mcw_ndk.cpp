@@ -60,7 +60,7 @@ enum media_info {
 struct AMediaFormat;
 struct AMediaCodec;
 struct AMediaCrypto;
-
+struct AMediaExtractor;
 
 struct AMediaCodecBufferInfo {
 	int32_t offset;
@@ -176,6 +176,20 @@ static struct mcw_ndk {
 			size_t idx,
 			int64_t timestampNs);
 	} AMediaCodec;
+
+	//mediaExtractor API
+	struct{
+		struct AMediaExtractor* (*nnew)();
+		void (*setDataSource)(AMediaExtractor* extractor,const char* path);
+		size_t (*getTrackCount)(AMediaExtractor* extractor);
+		struct AMediaFormat* (*getTrackFormat)(AMediaExtractor* extractor,size_t index);
+		void (*selectTrack)(AMediaExtractor* extractor,size_t index);
+		size_t (*readSampleData)(AMediaExtractor* extractor,uint8_t* buff,size_t buff_size);
+		long (*getSampleTime)(AMediaExtractor* extractor);
+		bool (*advance)(AMediaExtractor* extractor);
+		void (*release)(AMediaExtractor* extractor);
+	}AMediaExtractor;
+
 } mcw_ndk;
 
 
@@ -285,6 +299,17 @@ static const struct {
 	 offsetof(struct mcw_ndk, AMediaCodec.releaseOutputBuffer)},
 	{"AMediaCodec_releaseOutputBufferAtTime",
 	 offsetof(struct mcw_ndk, AMediaCodec.releaseOutputBufferAtTime)},
+
+	//mediaExtractor
+	{"AMediaExtractor_new",offsetof(struct mcw_ndk, AMediaExtractor.nnew)},
+	{"AMediaExtractor_setDataSource",offsetof(struct mcw_ndk, AMediaExtractor.setDataSource)},
+	{"AMediaExtractor_getTrackCount",offsetof(struct mcw_ndk, AMediaExtractor.getTrackCount)},
+	{"AMediaExtractor_getTrackFormat",offsetof(struct mcw_ndk, AMediaExtractor.getTrackFormat)},
+	{"AMediaExtractor_selectTrack",offsetof(struct mcw_ndk, AMediaExtractor.selectTrack)},
+	{"AMediaExtractor_readSampleData",offsetof(struct mcw_ndk, AMediaExtractor.readSampleData)},
+	{"AMediaExtractor_getSampleTime",offsetof(struct mcw_ndk, AMediaExtractor.getSampleTime)},
+	{"AMediaExtractor_advance",offsetof(struct mcw_ndk, AMediaExtractor.advance)},
+	{"AMediaExtractor_delete",offsetof(struct mcw_ndk, AMediaExtractor.release)},
 };
 
 
@@ -642,6 +667,43 @@ mcw_ndk_mediacodec_release_output_buffer_at_time(struct mcw_mediacodec *codec,
 }
 
 
+struct mcw_mediaExtractor* mcw_ndk_mediaExtractor_nnew(){
+	return (struct mcw_mediaExtractor*) mcw_ndk.AMediaExtractor.nnew();
+}
+
+void mcw_ndk_mediaExtractor_set_data_source(mcw_mediaExtractor* extractor,const char* path){
+	mcw_ndk.AMediaExtractor.setDataSource((AMediaExtractor*)extractor,path);
+}
+
+size_t mcw_ndk_mediaExtractor_get_track_count(mcw_mediaExtractor* extractor){
+	return mcw_ndk.AMediaExtractor.getTrackCount((AMediaExtractor*)extractor);
+}
+
+struct mcw_mediaformat* mcw_ndk_mediaExtractor_get_track_format(mcw_mediaExtractor* extractor,size_t index){
+	return (mcw_mediaformat*) mcw_ndk.AMediaExtractor.getTrackFormat((AMediaExtractor*)extractor,index);
+}
+
+void mcw_ndk_mediaExtractor_select_track(mcw_mediaExtractor* extractor,size_t index){
+	mcw_ndk.AMediaExtractor.selectTrack((AMediaExtractor*) extractor,index);
+}
+
+size_t mcw_ndk_mediaExtractor_read_sample_data(mcw_mediaExtractor* extractor,uint8_t* buff,size_t buff_size){
+	return mcw_ndk.AMediaExtractor.readSampleData((AMediaExtractor*)extractor,buff,buff_size);
+}
+
+long mcw_ndk_mediaExtractor_get_sample_time(mcw_mediaExtractor* extractor){
+	return mcw_ndk.AMediaExtractor.getSampleTime((AMediaExtractor*)extractor);
+}
+
+bool mcw_ndk_mediaExtractor_advance(mcw_mediaExtractor* extractor){
+	return mcw_ndk.AMediaExtractor.advance((AMediaExtractor*)extractor);
+}
+
+void mcw_ndk_mediaExtractor_release(mcw_mediaExtractor* extractor){
+	mcw_ndk.AMediaExtractor.release((AMediaExtractor*) extractor);
+}
+
+
 int mcw_ndk_init(struct mcw *mcw,void *jvm)
 {
 	LOGI("[ndk_init] mcw_ndk_init...");
@@ -761,6 +823,17 @@ end:
 		mcw_ndk_mediacodec_release_output_buffer;
 	mcw->mediacodec.release_output_buffer_at_time =
 		mcw_ndk_mediacodec_release_output_buffer_at_time;
+
+	//mediaExtractor
+	mcw->mediaExtractor.nnew = mcw_ndk_mediaExtractor_nnew;
+	mcw->mediaExtractor.set_data_source = mcw_ndk_mediaExtractor_set_data_source;
+	mcw->mediaExtractor.get_track_count = mcw_ndk_mediaExtractor_get_track_count;
+	mcw->mediaExtractor.get_track_format = mcw_ndk_mediaExtractor_get_track_format;
+	mcw->mediaExtractor.select_track = mcw_ndk_mediaExtractor_select_track;
+	mcw->mediaExtractor.read_sample_data = mcw_ndk_mediaExtractor_read_sample_data;
+	mcw->mediaExtractor.get_sample_time = mcw_ndk_mediaExtractor_get_sample_time;
+	mcw->mediaExtractor.advance = mcw_ndk_mediaExtractor_advance;
+	mcw->mediaExtractor.release = mcw_ndk_mediaExtractor_release;
 
 end2:
 	LOGI("[ndk_init] end2...");

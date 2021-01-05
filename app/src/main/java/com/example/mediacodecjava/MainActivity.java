@@ -3,6 +3,8 @@ package com.example.mediacodecjava;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import android.Manifest;
+import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
@@ -35,8 +37,16 @@ public class MainActivity extends AppCompatActivity{
     //private String path = Environment.getExternalStorageDirectory() + "/wonderful/demo.mp4";
     //private String path = Environment.getExternalStorageDirectory() + "/wonderful/LoveStory.mp4";
     //private String path = Environment.getExternalStorageDirectory() + "/wonderful/4kTest4.mp4";
-    private String path = Environment.getExternalStorageDirectory() + "/wonderful/video-h265.mkv";
+    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/video-h265.mkv";
     //private String path = Environment.getExternalStorageDirectory() + "/wonderful/4k360.mp4";
+    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/h265_4k.mp4";
+    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/h265_8k.mp4";
+    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/video2.m4s";
+    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/h265.qlv";
+    private String path = Environment.getExternalStorageDirectory() + "/wonderful/4k_h265_video.mp4";
+    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/vps_sps_pps.mp4";
+    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/36slice_error.mp4";
+    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/25slice.mp4";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,6 +54,8 @@ public class MainActivity extends AppCompatActivity{
         setContentView(R.layout.activity_main);
 
         permission();
+
+        mediaCodecInfo();
 
         surfaceView = findViewById(R.id.surface);
         play = findViewById(R.id.play);
@@ -84,6 +96,26 @@ public class MainActivity extends AppCompatActivity{
                 playVideoThread(surfaceViewJni.getHolder().getSurface(),path);
             }
         });
+    }
+
+    private void mediaCodecInfo(){
+        Log.d(TAG, "size: " +  MediaCodecList.getCodecCount());
+        Log.d(TAG,"Decode");
+        for (int i=0; i<MediaCodecList.getCodecCount(); i++){
+            MediaCodecInfo codecInfo = MediaCodecList.getCodecInfoAt(i);
+            if (codecInfo.isEncoder()) {
+                continue;
+            }
+            Log.d(TAG,codecInfo.getName());
+        }
+
+        Log.d(TAG,"Encode");
+        for (int i=0; i<MediaCodecList.getCodecCount(); i++){
+            MediaCodecInfo codecInfo = MediaCodecList.getCodecInfoAt(i);
+            if (codecInfo.isEncoder()) {
+                Log.d(TAG,codecInfo.getName());
+            }
+        }
     }
 
 

@@ -14,15 +14,17 @@
 #include "mcw_ndk.h"
 #include "media/NdkMediaExtractor.h"
 #include "DecodeInterface.h"
+#include "MediaDataCollector.h"
 #include "DataCollector.h"
 
 
 static JNIEnv *mJEnv = NULL;
 static JavaVM *mJavaVM = NULL;
 
-list<string> DataCollector:: markNameList;
-DataCollector* dataCollector = new DataCollector("codec",true);
-DataCollector* dataCollector2 = new DataCollector("codec",true);
+list<string> MediaDataCollector:: markNameList;
+MediaDataCollector* dataCollector2 = new MediaDataCollector("codec", true);
+
+DataCollector* dataCollector = new DataCollector("codec", true);
 
 extern "C" {
 
@@ -55,44 +57,45 @@ extern "C" {
                                                            jstring path) {
         // TODO: implement playVideo()
 
-        struct mcw *mcwMediaJni = nullptr;
-        struct mcw_mediacodec *codecJni = nullptr;
-        struct mcw_mediaformat *mcwFormatJni = nullptr;
+        struct mcw *mcwMedia = nullptr;
+        struct mcw_mediacodec *codec = nullptr;
+        struct mcw_mediaformat *mcwFormat = nullptr;
         struct mcw_mediaExtractor *extractor = nullptr;
         bool EOS = false;
         int64_t timeDif = -1;
 
         //init
-        mcw_new(mJavaVM, MCW_IMPLEMENTATION_JNI, &mcwMediaJni);
-        extractor = mcwMediaJni->mediaExtractor.nnew();
+        mcw_new(mJavaVM, MCW_IMPLEMENTATION_NDK, &mcwMedia);
+        extractor = mcwMedia->mediaExtractor.nnew();
 
         //setDataSource
         const char *dataPath = env->GetStringUTFChars(path, 0);
-        mcwMediaJni->mediaExtractor.set_data_source(extractor, dataPath);
+        mcwMedia->mediaExtractor.set_data_source(extractor, dataPath);
         env->ReleaseStringUTFChars(path, dataPath);
 
         //init codec from track format
-        int trackCount = mcwMediaJni->mediaExtractor.get_track_count(extractor);
+        int trackCount = mcwMedia->mediaExtractor.get_track_count(extractor);
         for (int i = 0; i < trackCount; ++i) {
-            mcwFormatJni = mcwMediaJni->mediaExtractor.get_track_format(extractor, i);
+            mcwFormat = mcwMedia->mediaExtractor.get_track_format(extractor, i);
             const char *mime;
-            mcwMediaJni->mediaformat.get_string(mcwFormatJni, mcwMediaJni->mediaformat.KEY_MIME, &mime);
+            mcwMedia->mediaformat.get_string(mcwFormat, mcwMedia->mediaformat.KEY_MIME, &mime);
             if (!strncmp(mime, "video/", 6)) {
-                mcwMediaJni->mediaExtractor.select_track(extractor, i);
-                codecJni = mcwMediaJni->mediacodec.create_decoder_by_type(mime);
-                if (codecJni == nullptr) {
+                mcwMedia->mediaExtractor.select_track(extractor, i);
+                codec = mcwMedia->mediacodec.create_decoder_by_type(mime);
+                if (codec == nullptr) {
                     return;
                 }
                 break;
             }
         }
 
+        LOGD("config");
         //configure and start the codec
-        if (codecJni == nullptr) {
+        if (codec == nullptr) {
             return;
         }
-        mcwMediaJni->mediacodec.configure(codecJni, mcwFormatJni, surface, nullptr, 0);
-        mcwMediaJni->mediacodec.start(codecJni);
+        mcwMedia->mediacodec.configure(codec, mcwFormat, surface, nullptr, 0);
+        mcwMedia->mediacodec.start(codec);
 
         while (running && !EOS) {
 
@@ -103,32 +106,31 @@ extern "C" {
             }
 
             //read the data and queue
-            ssize_t index = mcwMediaJni->mediacodec.dequeue_input_buffer(codecJni, 10000);
+            ssize_t index = mcwMedia->mediacodec.dequeue_input_buffer(codec, 10000);
             if (index >= 0) {
                 size_t size;
-                uint8_t *buff = mcwMediaJni->mediacodec.get_input_buffer(codecJni, index, &size);
-                dataCollector->captureInputBuffTimes();
+                uint8_t *buff = mcwMedia->mediacodec.get_input_buffer(codec, index, &size);
+                dataCollector->capture("get_input_buffer_times");
                 if (buff != nullptr) {
-                    dataCollector->captureInputBuffNum();
-                    size_t sampleSize = mcwMediaJni->mediaExtractor.read_sample_data(extractor, buff,size);
-                    if (sampleSize > 0) {
-                        long time = mcwMediaJni->mediaExtractor.get_sample_time(extractor);
-                        mcwMediaJni->mediacodec.queue_input_buffer(codecJni, index, 0, sampleSize, time,0);
-                        mcwMediaJni->mediaExtractor.advance(extractor);
-                        dataCollector->captureQueueInputBuffTimes();
-                        dataCollector->captureQueueInputBuffNum();
+                    dataCollector->capture("get_input_buffer_num");
+                    size_t sampleSize = mcwMedia->mediaExtractor.read_sample_data(extractor, buff,size);
+                    if (sampleSize >= 0) {
+                        long time = mcwMedia->mediaExtractor.get_sample_time(extractor);
+                        mcwMedia->mediacodec.queue_input_buffer(codec, index, 0, sampleSize, time,0);
+                        mcwMedia->mediaExtractor.advance(extractor);
+                        dataCollector->capture("queue_input_buffer_times");
+                        dataCollector->capture("queue_input_buffer_num");
                     } else {
                         EOS = true;
-                        mcwMediaJni->mediacodec.queue_input_buffer(codecJni, index, 0, 0, 0,
-                                                                   MCW_BUFFER_FLAG_END_OF_STREAM);
+                        mcwMedia->mediacodec.queue_input_buffer(codec, index, 0, 0, 0,MCW_BUFFER_FLAG_END_OF_STREAM);
                     }
                 }
             }
 
             //dequeue to get the decoded data and render
             struct mcw_mediacodec_bufferinfo bufferinfo;
-            int outIndex = mcwMediaJni->mediacodec.dequeue_output_buffer(codecJni, &bufferinfo, 10000);
-            dataCollector->captureDequeueOutputBuffTimes();
+            int outIndex = mcwMedia->mediacodec.dequeue_output_buffer(codec, &bufferinfo, 10000);
+            dataCollector->capture("dequeue_output_buffer_times");
             if (timeDif == -1) {
                 timeDif = systemnanotime() / 1000 - bufferinfo.presentation_time_us;
             }
@@ -146,28 +148,28 @@ extern "C" {
                     if (delay > 0) {
                         //usleep(delay);
                     }
-                    mcwMediaJni->mediacodec.release_output_buffer(codecJni, outIndex, outIndex > 0);
+                    mcwMedia->mediacodec.release_output_buffer(codec, outIndex, outIndex > 0);
                     if(outIndex > 0){
-                        dataCollector->captureDequeueOutputBuffNum();
+                        dataCollector->capture("dequeue_output_buffer_num");
                     }
                     break;
             }
 
             if ((bufferinfo.flags & MCW_BUFFER_FLAG_END_OF_STREAM) != 0) {
-                break;
+                //break;
             }
         }
 
         //release
-        mcwMediaJni->mediacodec.stop(codecJni);
-        mcwMediaJni->mediaExtractor.release(extractor);
+        mcwMedia->mediacodec.stop(codec);
+        mcwMedia->mediaExtractor.release(extractor);
 
     }
 
 
-    struct mcw *mcwMediaJni = nullptr;
-    struct mcw_mediacodec *codecJni = nullptr;
-    struct mcw_mediaformat *mcwFormatJni = nullptr;
+    struct mcw *mcwMedia = nullptr;
+    struct mcw_mediacodec *codec = nullptr;
+    struct mcw_mediaformat *mcwFormat = nullptr;
     struct mcw_mediaExtractor *extractor = nullptr;
     bool EOS = false;
     int64_t timeDif = -1;
@@ -184,27 +186,27 @@ extern "C" {
             }
 
             //read the data and queue
-            ssize_t index = mcwMediaJni->mediacodec.dequeue_input_buffer(codecJni, 10000);
+            ssize_t index = mcwMedia->mediacodec.dequeue_input_buffer(codec, 10000);
             if (index >= 0) {
                 size_t size;
-                uint8_t *buff = mcwMediaJni->mediacodec.get_input_buffer(codecJni, index, &size);
+                uint8_t *buff = mcwMedia->mediacodec.get_input_buffer(codec, index, &size);
                 dataCollector2->captureInputBuffTimes();
                 if (buff != nullptr) {
                     dataCollector2->captureInputBuffNum();
                     LOGD("[JNI CODEC] read sample ...");
-                    size_t sampleSize = mcwMediaJni->mediaExtractor.read_sample_data(extractor, buff,
+                    size_t sampleSize = mcwMedia->mediaExtractor.read_sample_data(extractor, buff,
                                                                                      size);
-                    if (sampleSize > 0) {
+                    if (sampleSize >= 0) {
                         LOGD("[JNI CODEC] read sample ok: %d", sampleSize);
-                        long time = mcwMediaJni->mediaExtractor.get_sample_time(extractor);
-                        mcwMediaJni->mediacodec.queue_input_buffer(codecJni, index, 0, sampleSize, time,0);
-                        mcwMediaJni->mediaExtractor.advance(extractor);
+                        long time = mcwMedia->mediaExtractor.get_sample_time(extractor);
+                        mcwMedia->mediacodec.queue_input_buffer(codec, index, 0, sampleSize, time,0);
+                        mcwMedia->mediaExtractor.advance(extractor);
                         dataCollector2->captureQueueInputBuffTimes();
                         dataCollector2->captureQueueInputBuffNum();
                     } else {
                         EOS = true;
-                        mcwMediaJni->mediacodec.queue_input_buffer(codecJni, index, 0, 0, 0,
-                                                                   MCW_BUFFER_FLAG_END_OF_STREAM);
+                        mcwMedia->mediacodec.queue_input_buffer(codec, index, 0, 0, 0,MCW_BUFFER_FLAG_END_OF_STREAM);
+                        LOGD("[JNI CODEC] end of stream !");
                     }
                 } else {
                     LOGD("[JNI CODEC] get_input_buffer is null !!!");
@@ -213,7 +215,7 @@ extern "C" {
 
             //dequeue to get the decoded data and render
             struct mcw_mediacodec_bufferinfo bufferinfo;
-            int outIndex = mcwMediaJni->mediacodec.dequeue_output_buffer(codecJni, &bufferinfo, 10000);
+            int outIndex = mcwMedia->mediacodec.dequeue_output_buffer(codec, &bufferinfo, 10000);
             dataCollector2->captureDequeueOutputBuffTimes();
 
             if (timeDif == -1) {
@@ -237,28 +239,54 @@ extern "C" {
                     LOGD("[JNI CODEC] currentTimeUs: %lld us", currentTimeUs);
                     LOGD("[JNI CODEC] sleep: %lld us", delay);
                     if (delay > 0) {
-                        usleep(delay);
+                        //usleep(delay);
                     }
                     LOGD("[JNI CODEC] render: %d", outIndex > 0);
-                    mcwMediaJni->mediacodec.release_output_buffer(codecJni, outIndex, outIndex > 0);
+                    mcwMedia->mediacodec.release_output_buffer(codec, outIndex, outIndex > 0);
                     if(outIndex > 0){
                         dataCollector2->captureDequeueOutputBuffNum();
                     }
-
                     break;
             }
 
+            LOGD("[JNI CODEC] info flag : %d",bufferinfo.flags);
             if ((bufferinfo.flags & MCW_BUFFER_FLAG_END_OF_STREAM) != 0) {
-                break;
+                LOGD("[JNI CODEC] EOS = true");
+                //break;
             }
         }
 
         //release
         LOGD("[JNI CODEC] release");
-        mcwMediaJni->mediacodec.stop(codecJni);
-        mcwMediaJni->mediaExtractor.release(extractor);
+        mcwMedia->mediacodec.stop(codec);
+        mcwMedia->mediaExtractor.release(extractor);
 
         return nullptr;
+    }
+
+    string getFormatParameters(const char* name){
+        uint8_t data[512];
+        size_t data_size;
+        mcwMedia->mediaformat.get_buffer(mcwFormat, name, (void **)(&data), &data_size);
+        string data_content = name;
+        data_content += " size: " + to_string(data_size) + "\n";
+        data_content += "content:\n";
+        if(data == nullptr){
+            return data_content;
+        }
+        int count = 0;
+        for (int i = 0; i < data_size; ++i) {
+            char dataX[16];
+            sprintf(dataX,"%x",data[i]);
+            string dataStringX = dataX;
+            data_content += dataStringX + " ";
+            count++;
+            if(count == 20){
+                data_content += "\n";
+                count = 0;
+            }
+        }
+        return data_content;
     }
 
     JNIEXPORT void JNICALL
@@ -267,8 +295,8 @@ extern "C" {
         // TODO: implement playVideoThread()
 
         //init
-        mcw_new(mJavaVM, MCW_IMPLEMENTATION_JNI, &mcwMediaJni);
-        extractor = mcwMediaJni->mediaExtractor.nnew();
+        mcw_new(mJavaVM, MCW_IMPLEMENTATION_NDK, &mcwMedia);
+        extractor = mcwMedia->mediaExtractor.nnew();
         if (extractor == nullptr) {
             LOGE("[JNI CODEC] create extractor failed");
         }
@@ -276,21 +304,28 @@ extern "C" {
         //setDataSource
         const char *dataPath = env->GetStringUTFChars(path, 0);
         LOGD("[JNI CODEC] set_data_source...");
-        mcwMediaJni->mediaExtractor.set_data_source(extractor, dataPath);
+        mcwMedia->mediaExtractor.set_data_source(extractor, dataPath);
         env->ReleaseStringUTFChars(path, dataPath);
 
         //init codec from track format
-        int trackCount = mcwMediaJni->mediaExtractor.get_track_count(extractor);
+        int trackCount = mcwMedia->mediaExtractor.get_track_count(extractor);
         LOGD("[JNI CODEC] trackCount: %d", trackCount);
         for (int i = 0; i < trackCount; ++i) {
-            mcwFormatJni = mcwMediaJni->mediaExtractor.get_track_format(extractor, i);
+            mcwFormat = mcwMedia->mediaExtractor.get_track_format(extractor, i);
             const char *mime;
-            mcwMediaJni->mediaformat.get_string(mcwFormatJni, mcwMediaJni->mediaformat.KEY_MIME, &mime);
-            LOGD("[JNI CODEC] mediaFormat: %s", mime);
+            mcwMedia->mediaformat.get_string(mcwFormat, mcwMedia->mediaformat.KEY_MIME, &mime);
+            LOGD("[JNI CODEC] mediaFormat-mime: %s", mime);
+            LOGD("[JNI CODEC] mediaFormat: %s", mcwMedia->mediaformat.to_string(mcwFormat));
+
+            string parameter = getFormatParameters("csd-0");
+            LOGD("[JNI CODEC] csd0: %s",parameter.c_str());
+            //parameter = getFormatParameters("csd-1");
+            //LOGD("[JNI CODEC] csd1: %s",parameter.c_str());
+
             if (!strncmp(mime, "video/", 6)) {
-                mcwMediaJni->mediaExtractor.select_track(extractor, i);
-                codecJni = mcwMediaJni->mediacodec.create_decoder_by_type(mime);
-                if (codecJni == nullptr) {
+                mcwMedia->mediaExtractor.select_track(extractor, i);
+                codec = mcwMedia->mediacodec.create_decoder_by_type(mime);
+                if (codec == nullptr) {
                     LOGE("[JNI CODEC] create codec failed");
                     return;
                 }
@@ -299,12 +334,12 @@ extern "C" {
         }
 
         //configure and start the codec
-        if (codecJni == nullptr) {
+        if (codec == nullptr) {
             LOGE("[JNI CODEC] codec has not been create");
             return;
         }
-        mcwMediaJni->mediacodec.configure(codecJni, mcwFormatJni, surface, nullptr, 0);
-        mcwMediaJni->mediacodec.start(codecJni);
+        mcwMedia->mediacodec.configure(codec, mcwFormat, surface, nullptr, 0);
+        mcwMedia->mediacodec.start(codec);
 
         //create a thread to decode
         pthread_create(&decodeThread, nullptr, decodeTask, nullptr);
