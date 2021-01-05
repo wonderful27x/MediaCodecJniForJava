@@ -129,6 +129,8 @@ struct mcw {
 		//函数指针，指向一个用于创建mcw_mediaformat的函数
 		struct mcw_mediaformat *(*nnew)(void);
 
+        struct mcw_mediaformat *(*create_video_format)(const char* mime,int width,int height);
+
 		enum mcw_media_status (*ddelete)(
 			struct mcw_mediaformat *format);
 

@@ -94,6 +94,7 @@ static struct mcw_jni {
 	struct {
 		jclass clazz;
 		jmethodID nnew;				/* API level 16 */
+        jmethodID createVideoFormat;/* API level 16 */
 		jmethodID toString;			/* API level 16 */
 		jmethodID getInteger;			/* API level 16 */
 		jmethodID getLong;			/* API level 16 */
@@ -174,6 +175,7 @@ static const struct {
 	int offset;
 	int critical;
 } mcw_jni_member[] = {
+    //BufferInfo
 	{MCW_JNI_MEMBER_TYPE_METHOD,
 	 "<init>",
 	 "()V",
@@ -204,12 +206,20 @@ static const struct {
 	 offsetof(struct mcw_jni, BufferInfo.clazz),
 	 offsetof(struct mcw_jni, BufferInfo.size),
 	 1},
+
+	 //MediaFormat
 	{MCW_JNI_MEMBER_TYPE_METHOD,
 	 "<init>",
 	 "()V",
 	 offsetof(struct mcw_jni, MediaFormat.clazz),
 	 offsetof(struct mcw_jni, MediaFormat.nnew),
 	 1},
+    {MCW_JNI_MEMBER_TYPE_STATIC_METHOD,
+            "createVideoFormat",
+            "(Ljava/lang/String;II)Landroid/media/MediaFormat;",
+            offsetof(struct mcw_jni, MediaFormat.clazz),
+            offsetof(struct mcw_jni, MediaFormat.createVideoFormat),
+            1},
 	{MCW_JNI_MEMBER_TYPE_METHOD,
 	 "toString",
 	 "()Ljava/lang/String;",
@@ -817,6 +827,66 @@ end:
 		return (struct mcw_mediaformat *)fmt;
 }
 
+static struct mcw_mediaformat *mcw_jni_create_video_format(const char* mime,int width,int height){
+    int error = 0;
+    struct mcw_jni_mediaformat *fmt = NULL;
+    jobject j_fmt = NULL;
+    jobject j_name = NULL;
+    bool attached = false;
+    JNIEnv *env = NULL;
+
+    fmt = (struct mcw_jni_mediaformat *)calloc(1, sizeof(*fmt));
+    if (fmt == NULL) {
+        LOGE("calloc", ENOMEM);
+        return NULL;
+    }
+
+    attached = mcw_jni_attach_and_get_env(&env);
+    if (!env) {
+        error = 1;
+        goto end;
+    }
+
+    j_name = mcw_jni_string_new(env,mime);
+    if (!j_name) {
+        LOGE("string creation failed");
+        error = 1;
+        goto end;
+    }
+
+    j_fmt = env->CallStaticObjectMethod(
+            mcw_jni.MediaFormat.clazz,
+            mcw_jni.MediaFormat.createVideoFormat,
+            j_name,
+            width,
+            height
+            );
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        error = 1;
+        goto end;
+    }
+    if (!j_fmt) {
+        LOGE("format creation failed");
+        error = 1;
+        goto end;
+    }
+    fmt->mediaformat = env->NewGlobalRef(j_fmt);
+
+    end:
+    if (j_fmt)
+        env->DeleteLocalRef(j_fmt);
+    if (j_name)
+        env->DeleteLocalRef(j_name);
+    mcw_jni_detach(attached);
+
+    if (error) {
+        free(fmt);
+        return NULL;
+    } else
+        return (struct mcw_mediaformat *)fmt;
+}
 
 static enum mcw_media_status
 mcw_jni_mediaformat_delete(struct mcw_mediaformat *format)
@@ -2708,6 +2778,7 @@ end:
     LOGD("[jni_init] end...");
 	mcw->implem = MCW_IMPLEMENTATION_JNI;
 	mcw->mediaformat.nnew = mcw_jni_mediaformat_new;
+    mcw->mediaformat.create_video_format = mcw_jni_create_video_format;
 	mcw->mediaformat.ddelete = mcw_jni_mediaformat_delete;
 	mcw->mediaformat.to_string = mcw_jni_mediaformat_to_string;
 	mcw->mediaformat.get_int32 = mcw_jni_mediaformat_get_int32;

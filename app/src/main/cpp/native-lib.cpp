@@ -239,7 +239,7 @@ extern "C" {
                     LOGD("[JNI CODEC] currentTimeUs: %lld us", currentTimeUs);
                     LOGD("[JNI CODEC] sleep: %lld us", delay);
                     if (delay > 0) {
-                        //usleep(delay);
+                        usleep(delay);
                     }
                     LOGD("[JNI CODEC] render: %d", outIndex > 0);
                     mcwMedia->mediacodec.release_output_buffer(codec, outIndex, outIndex > 0);
@@ -321,6 +321,9 @@ extern "C" {
             LOGD("[JNI CODEC] csd0: %s",parameter.c_str());
             //parameter = getFormatParameters("csd-1");
             //LOGD("[JNI CODEC] csd1: %s",parameter.c_str());
+
+            //TEST
+            mcwMedia->mediaformat.create_video_format(mime,100,200);
 
             if (!strncmp(mime, "video/", 6)) {
                 mcwMedia->mediaExtractor.select_track(extractor, i);

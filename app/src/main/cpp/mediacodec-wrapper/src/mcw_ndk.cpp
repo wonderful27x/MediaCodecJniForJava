@@ -704,6 +704,15 @@ void mcw_ndk_mediaExtractor_release(mcw_mediaExtractor* extractor){
 }
 
 
+struct mcw_mediaformat* mcw_ndk_create_video_format(const char* mime,int width,int height){
+    LOGW("warning: the method -> create_video_format is not support in ndk !!! We will just new it.");
+	struct AMediaFormat *format = mcw_ndk.AMediaFormat.nnew();
+	mcw_ndk.AMediaFormat.setString(format,*mcw_ndk.AMediaFormat.KEY_MIME,mime);
+	mcw_ndk.AMediaFormat.setInt32(format,*mcw_ndk.AMediaFormat.KEY_WIDTH,width);
+	mcw_ndk.AMediaFormat.setInt32(format,*mcw_ndk.AMediaFormat.KEY_HEIGHT,height);
+    return (struct mcw_mediaformat*)format;
+}
+
 int mcw_ndk_init(struct mcw *mcw,void *jvm)
 {
 	LOGI("[ndk_init] mcw_ndk_init...");
@@ -749,6 +758,7 @@ end:
 	LOGI("[ndk_init] end...");
 	mcw->implem = MCW_IMPLEMENTATION_NDK;
 	mcw->mediaformat.nnew = mcw_ndk_mediaformat_new;
+    mcw->mediaformat.create_video_format = mcw_ndk_create_video_format;
 	mcw->mediaformat.ddelete = mcw_ndk_mediaformat_delete;
 	mcw->mediaformat.to_string = mcw_ndk_mediaformat_to_string;
 	mcw->mediaformat.get_int32 = mcw_ndk_mediaformat_get_int32;
