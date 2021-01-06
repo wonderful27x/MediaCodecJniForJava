@@ -21,10 +21,9 @@
 static JNIEnv *mJEnv = NULL;
 static JavaVM *mJavaVM = NULL;
 
-list<string> MediaDataCollector:: markNameList;
-MediaDataCollector* dataCollector2 = new MediaDataCollector("codec", true);
+DataCollector* dataCollector = new DataCollector("codec");
+MediaDataCollector* mediaDataCollector = new MediaDataCollector("codec");
 
-DataCollector* dataCollector = new DataCollector("codec", true);
 
 extern "C" {
 
@@ -65,7 +64,7 @@ extern "C" {
         int64_t timeDif = -1;
 
         //init
-        mcw_new(mJavaVM, MCW_IMPLEMENTATION_NDK, &mcwMedia);
+        mcw_new(mJavaVM, MCW_IMPLEMENTATION_AUTO, &mcwMedia);
         extractor = mcwMedia->mediaExtractor.nnew();
 
         //setDataSource
@@ -100,7 +99,7 @@ extern "C" {
         while (running && !EOS) {
 
             dataCollector->startTrance();
-            const char* info = dataCollector->takeSample(1000,100);
+            const char* info = dataCollector->takeSample();
             if(info != nullptr){
                 LOGD("DECODE INFO: %s",info);
             }
@@ -179,8 +178,8 @@ extern "C" {
     void *decodeTask(void *) {
         while (running && !EOS) {
 
-            dataCollector2->startTrance();
-            const char* info = dataCollector2->takeSample(1000,100);
+            mediaDataCollector->startTrance();
+            const char* info = mediaDataCollector->takeSample();
             if(info != nullptr){
                 LOGD("DECODE INFO: %s",info);
             }
@@ -190,9 +189,9 @@ extern "C" {
             if (index >= 0) {
                 size_t size;
                 uint8_t *buff = mcwMedia->mediacodec.get_input_buffer(codec, index, &size);
-                dataCollector2->captureInputBuffTimes();
+                mediaDataCollector->capture("captureInputBuffTimes");
                 if (buff != nullptr) {
-                    dataCollector2->captureInputBuffNum();
+                    mediaDataCollector->capture("captureInputBuffNum");
                     LOGD("[JNI CODEC] read sample ...");
                     size_t sampleSize = mcwMedia->mediaExtractor.read_sample_data(extractor, buff,
                                                                                      size);
@@ -201,8 +200,8 @@ extern "C" {
                         long time = mcwMedia->mediaExtractor.get_sample_time(extractor);
                         mcwMedia->mediacodec.queue_input_buffer(codec, index, 0, sampleSize, time,0);
                         mcwMedia->mediaExtractor.advance(extractor);
-                        dataCollector2->captureQueueInputBuffTimes();
-                        dataCollector2->captureQueueInputBuffNum();
+                        mediaDataCollector->capture("captureQueueInputBuffTimes");
+                        mediaDataCollector->capture("captureQueueInputBuffNum");
                     } else {
                         EOS = true;
                         mcwMedia->mediacodec.queue_input_buffer(codec, index, 0, 0, 0,MCW_BUFFER_FLAG_END_OF_STREAM);
@@ -216,7 +215,7 @@ extern "C" {
             //dequeue to get the decoded data and render
             struct mcw_mediacodec_bufferinfo bufferinfo;
             int outIndex = mcwMedia->mediacodec.dequeue_output_buffer(codec, &bufferinfo, 10000);
-            dataCollector2->captureDequeueOutputBuffTimes();
+            mediaDataCollector->capture("captureDequeueOutputBuffTimes");
 
             if (timeDif == -1) {
                 timeDif = systemnanotime() / 1000 - bufferinfo.presentation_time_us;
@@ -244,7 +243,7 @@ extern "C" {
                     LOGD("[JNI CODEC] render: %d", outIndex > 0);
                     mcwMedia->mediacodec.release_output_buffer(codec, outIndex, outIndex > 0);
                     if(outIndex > 0){
-                        dataCollector2->captureDequeueOutputBuffNum();
+                        mediaDataCollector->capture("captureDequeueOutputBuffNum");
                     }
                     break;
             }
@@ -295,7 +294,7 @@ extern "C" {
         // TODO: implement playVideoThread()
 
         //init
-        mcw_new(mJavaVM, MCW_IMPLEMENTATION_NDK, &mcwMedia);
+        mcw_new(mJavaVM, MCW_IMPLEMENTATION_JNI, &mcwMedia);
         extractor = mcwMedia->mediaExtractor.nnew();
         if (extractor == nullptr) {
             LOGE("[JNI CODEC] create extractor failed");

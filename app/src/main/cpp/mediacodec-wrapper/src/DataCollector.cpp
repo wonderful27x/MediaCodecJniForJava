@@ -5,62 +5,70 @@
 
 list<string> DataCollector:: markNameList;
 
-DataCollector::DataCollector(string markName, bool on_off) {
-    int position = hasSameMark(markName);
-    if(position != -1){
-        markName += "$" + to_string(systemMillisecondTime());
-    }
-    markNameList.push_back(markName);
+/**
+ * 构造函数
+ * @param markName 标识
+ * @param period_ms 统计周期，单位：毫秒
+ * @param on_off 是否开启，可已在这里关闭统计，默认值：true
+ */
+DataCollector::DataCollector(string markName,long period_ms,bool on_off) {
     this->markName = markName;
+    this->period = period_ms;
     this->TURN_ON = on_off;
+
+    //如果创建了同名的markName,则使用时间戳区分
+    int position = hasSameMark(this->markName);
+    if(position != -1){
+        struct timeval tv;
+        gettimeofday(&tv, nullptr);
+        int64_t millisecondTime = ((long long)tv.tv_sec) * 1000 + tv.tv_usec / 1000;
+        this->markName += "$" + to_string(millisecondTime);
+    }
+    markNameList.push_back(this->markName);
 }
 
+/**
+ * 统计一次，让统计的项加一
+ * @param key 需要统计的数据名称/key
+ */
 void DataCollector::capture(string key) {
     if(dataInfoPeriod.count(key)){
         dataInfoPeriod[key] += 1;
     }else{
         dataInfoPeriod[key] = 1;
     }
-
-    if(dataInfoFrequency.count(key)){
-        dataInfoFrequency[key] += 1;
-    }else{
-        dataInfoFrequency[key] = 1;
-    }
 }
 
+/**
+ * 开始收集数据，循环中使用
+ */
 void DataCollector::startTrance() {
     if(!TURN_ON)return;
 
     if (!isTrance){
-        isTrance = true;
         reset();
         timeStart = systemMillisecondTime();
+        isTrance = true;
     }
 }
 
-const char *DataCollector::takeSample(long period, long frequency) {
+/**
+ * 采样输出，循环中使用
+ * @return
+ */
+const char *DataCollector::takeSample() {
 
     if(!TURN_ON)return nullptr;
 
-    static int64_t startTime = systemMillisecondTime();
     int64_t currentTime = systemMillisecondTime();
-
-    if((currentTime - startTime) < frequency){
-        return nullptr;
-    }
-    startTime = currentTime;
+    if((currentTime - timeStart) < period)return nullptr;
 
     timeEnd = currentTime;
     timeContinue = timeEnd - timeStart;
-    if (timeContinue < period) {
-        getFrequencyInfo();
-        return frequencyInfo.c_str();
-    } else{
-        isTrance = false;
-        getPeriodInfo();
-        return periodInfo.c_str();
-    }
+
+    isTrance = false;
+    getPeriodInfo();
+    return periodInfo.c_str();
 }
 
 void DataCollector::turnOn() {
@@ -71,45 +79,40 @@ void DataCollector::turnOff() {
     TURN_ON = false;
 }
 
+bool DataCollector::isTurnOn() {
+    return TURN_ON;
+}
+
 void DataCollector::reset() {
     timeStart = 0;
     timeEnd = 0;
     timeContinue = 0;
-    periodInfo = "";
-    frequencyInfo = "";
 
     map<string,int>::iterator it_p;
     for(it_p = dataInfoPeriod.begin();it_p != dataInfoPeriod.end();it_p++)
     {
         (*it_p).second = 0;
     }
-
-    map<string,int>::iterator it_f;
-    for(it_f = dataInfoPeriod.begin();it_f != dataInfoPeriod.end();it_f++)
-    {
-        (*it_f).second = 0;
-    }
 }
 
-void DataCollector::getPeriodInfo() {
+/**
+ * 将一个周期内的所有统计数据转成string
+ * @return
+ */
+string DataCollector::getPeriodInfo() {
     periodInfo = "==========#" + markName + "#=====Period Info=====================\n";
     periodInfo += "起始时间：" + to_string(timeStart) + "\n";
     periodInfo += "终止时间：" + to_string(timeEnd) + "\n";
     periodInfo += "统计时长：" + to_string(timeContinue) + "ms\n";
     map<string,int> :: iterator it_p;
     for(it_p = dataInfoPeriod.begin(); it_p != dataInfoPeriod.end(); it_p++){
-        periodInfo += (*it_p).first + ": " + to_string((*it_p).second) + "\n";
+        periodInfo += (*it_p).first + ": " + to_string((*it_p).second) + " | ";
+        periodInfo += to_string((*it_p).second  * 1000.0 / timeContinue) + "\n";
     }
+    periodInfo += "==============Period end=================\n\n";
+    return periodInfo;
 }
 
-void DataCollector::getFrequencyInfo() {
-    frequencyInfo = "==========#" + markName + "#=====Frequency Info=====================\n";
-    frequencyInfo += "统计时长：" + to_string(timeContinue) + "\n";
-    map<string,int> :: iterator it_f;
-    for(it_f = dataInfoFrequency.begin(); it_f != dataInfoFrequency.end(); it_f++){
-        frequencyInfo += (*it_f).first + ": " + to_string((*it_f).second) + "\n";
-    }
-}
 
 int DataCollector::hasSameMark(string mark) {
     int position = -1;

@@ -43,10 +43,13 @@ public class MainActivity extends AppCompatActivity{
     //private String path = Environment.getExternalStorageDirectory() + "/wonderful/h265_8k.mp4";
     //private String path = Environment.getExternalStorageDirectory() + "/wonderful/video2.m4s";
     //private String path = Environment.getExternalStorageDirectory() + "/wonderful/h265.qlv";
-    private String path = Environment.getExternalStorageDirectory() + "/wonderful/4k_h265_video.mp4";
+    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/4k_h265_video.mp4";
     //private String path = Environment.getExternalStorageDirectory() + "/wonderful/vps_sps_pps.mp4";
     //private String path = Environment.getExternalStorageDirectory() + "/wonderful/36slice_error.mp4";
     //private String path = Environment.getExternalStorageDirectory() + "/wonderful/25slice.mp4";
+    private String path = Environment.getExternalStorageDirectory() + "/wonderful/streamSlice25.mp4";
+    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/Immersive_high32.mp4";
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
