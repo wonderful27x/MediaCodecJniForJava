@@ -3,6 +3,8 @@ package com.example.mediacodecjava;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import android.Manifest;
+import android.content.SharedPreferences;
+import android.content.res.AssetManager;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.os.Bundle;
@@ -12,9 +14,20 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
+
+import com.example.mediacodecjava.custom_view.ReSpinner;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.wonderful.permissionlibrary.annotation.PermissionCheck;
 import com.wonderful.permissionlibrary.annotation.PermissionResult;
+
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.List;
 
 
 public class MainActivity extends AppCompatActivity{
@@ -30,25 +43,29 @@ public class MainActivity extends AppCompatActivity{
     private SurfaceView surfaceView;
     private Button play;
 
-
     private SurfaceView surfaceViewJni;
     private Button playJni;
 
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/demo.mp4";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/LoveStory.mp4";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/4kTest4.mp4";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/video-h265.mkv";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/4k360.mp4";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/h265_4k.mp4";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/h265_8k.mp4";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/video2.m4s";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/h265.qlv";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/4k_h265_video.mp4";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/vps_sps_pps.mp4";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/36slice_error.mp4";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/25slice.mp4";
-    private String path = Environment.getExternalStorageDirectory() + "/wonderful/streamSlice25.mp4";
-    //private String path = Environment.getExternalStorageDirectory() + "/wonderful/Immersive_high32.mp4";
+    private EditText customAddress;
+    private ReSpinner history;
+    private ArrayAdapter<String> spinnerAdapter;
+    private List<String> historyList;
+    private Gson gson = new Gson();
+    private static final String HISTORY_KEY = "historyAddress";
+    private static final int MAX_HISTORY_NUM = 10;
+
+    private String dir = Environment.getExternalStorageDirectory() + "/wonderful/";
+    private String[] pathArray = {
+            dir + "4k_h265_video.mp4",
+            dir + "h265_2304_1600.mp4",
+            dir + "Immersive_high30_1.mp4",
+            dir + "test_4K_360_2D_30fps_sea.mp4",
+            dir + "Immersive_high45.mp4",
+            dir + "VR_2880x1600.mp4",
+            dir + "VR_2880x1600Main10.mp4",
+            dir + "Immersive_high_temp.mp4",
+            "video/demo.mp4",
+    };
 
 
     @Override
@@ -62,6 +79,27 @@ public class MainActivity extends AppCompatActivity{
 
         surfaceView = findViewById(R.id.surface);
         play = findViewById(R.id.play);
+        customAddress = findViewById(R.id.customAddress);
+        history = findViewById(R.id.history);
+
+        historyList = new ArrayList<>();
+        historyGet(historyList);
+        historySave(false,pathArray);
+        spinnerAdapter = new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,historyList);
+        history.setAdapter(spinnerAdapter);
+
+        history.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
+                customAddress.setText(historyList.get(i));
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+
+            }
+        });
+
         surfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
             @Override
             public void surfaceCreated(@NonNull SurfaceHolder holder) {
@@ -85,6 +123,7 @@ public class MainActivity extends AppCompatActivity{
         play.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                historySave(true,customAddress.getText().toString());
                 playerThread.start();
             }
         });
@@ -96,9 +135,50 @@ public class MainActivity extends AppCompatActivity{
         playJni.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                playVideoThread(surfaceViewJni.getHolder().getSurface(),path);
+                historySave(true,customAddress.getText().toString());
+                playVideoThread(surfaceViewJni.getHolder().getSurface(),getResources().getAssets(),customAddress.getText().toString());
             }
         });
+
+        play.requestFocus();
+
+    }
+
+
+    //獲取輸入的歷史地址
+    private void historyGet(List<String> historyList){
+        SharedPreferences preferences = getSharedPreferences(HISTORY_KEY, MODE_PRIVATE);
+        String history = preferences.getString(HISTORY_KEY,null);
+        if (history != null){
+            Type type = new TypeToken<List<String>>(){}.getType();
+            List<String> list = gson.fromJson(history,type);
+            if (list != null){
+                historyList.clear();
+                historyList.addAll(list);
+                if (spinnerAdapter != null){
+                    spinnerAdapter.notifyDataSetChanged();
+                }
+            }
+        }
+    }
+
+    //保存輸入的歷史地址
+    private void historySave(boolean reorder,String... addressArray){
+        for (String address:addressArray){
+            if(historyList.contains(address) && !reorder)continue;
+            historyList.remove(address);
+            if(historyList.size() < MAX_HISTORY_NUM){
+                historyList.add(0,address);
+            }else{
+                break;
+            }
+        }
+        if (spinnerAdapter != null){
+            spinnerAdapter.notifyDataSetChanged();
+        }
+        String json = gson.toJson(historyList);
+        SharedPreferences preferences = getSharedPreferences(HISTORY_KEY, MODE_PRIVATE);
+        preferences.edit().putString(HISTORY_KEY,json).apply();
     }
 
     private void mediaCodecInfo(){
@@ -110,6 +190,10 @@ public class MainActivity extends AppCompatActivity{
                 continue;
             }
             Log.d(TAG,codecInfo.getName());
+//            for(String type:codecInfo.getSupportedTypes()){
+//                MediaCodecInfo.CodecCapabilities codecCapabilities = codecInfo.getCapabilitiesForType(type);
+//                Log.d(TAG,"max SupportInstance: " + codecCapabilities.getMaxSupportedInstances());
+//            }
         }
 
         Log.d(TAG,"Encode");
@@ -126,7 +210,7 @@ public class MainActivity extends AppCompatActivity{
 
         @Override
         public void run() {
-            playVideo(surfaceView.getHolder().getSurface(),path);
+            playVideo(surfaceView.getHolder().getSurface(),getResources().getAssets(),customAddress.getText().toString());
         }
     }
 
@@ -152,8 +236,7 @@ public class MainActivity extends AppCompatActivity{
     private void permission(){
     }
 
-
-    public native void playVideo(Surface surface,String path);
-    public native void playVideoThread(Surface surface,String path);
+    public native void playVideo(Surface surface, AssetManager assetManager,String path);
+    public native void playVideoThread(Surface surface, AssetManager assetManager,String path);
     public native void stop();
 }

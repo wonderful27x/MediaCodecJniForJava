@@ -102,6 +102,8 @@ enum mcw_media_status {
 #define MCW_COLOR_FORMAT_QCOM_YUV420PackedSemiPlanar64x32Tile2m8ka 0x7FA30C03
 #define MCW_COLOR_FORMAT_QCOM_YUV420SemiPlanar32m 0x7FA30C04
 
+#define VIDEO_SCALING_MODE_SCALE_TO_FIT 0x00000001
+#define VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING 0x00000002
 
 /* Forward declarations */
 struct mcw_mediaformat;
@@ -298,12 +300,15 @@ struct mcw {
 			struct mcw_mediacodec *codec,
 			size_t idx,
 			int64_t timestamp_ns);
+
+		void (*set_video_scaling_mode)(struct mcw_mediacodec *codec,int mode);
 	} mediacodec;
 
 	/*MediaExtractor API*/
 	struct{
 		struct mcw_mediaExtractor* (*nnew)();
 		void (*set_data_source)(mcw_mediaExtractor* extractor,const char* path);
+		void (*set_data_source_fd)(mcw_mediaExtractor* extractor,int descriptor, int64_t offset, int64_t length);
 		size_t (*get_track_count)(mcw_mediaExtractor* extractor);
         struct mcw_mediaformat* (*get_track_format)(mcw_mediaExtractor* extractor,size_t index);
         void (*select_track)(mcw_mediaExtractor* extractor,size_t index);

@@ -127,6 +127,7 @@ static struct mcw_jni {
 		jmethodID getOutputFormat;		/* API level 16 */
 		jmethodID releaseOutputBuffer;		/* API level 16 */
 		jmethodID releaseOutputBufferAtTime;	/* API level 21 */
+		jmethodID setVideoScalingMode;      /* API level 16 */
 	} MediaCodec;
 
 	//将MediaExtractor也转成jni
@@ -134,6 +135,7 @@ static struct mcw_jni {
         jclass clazz;
         jmethodID nnew;   /* API level ? */
         jmethodID setDataSource;   /* API level ? */
+        jmethodID setDataSourceFd; /* API level ? */
         jmethodID getTrackCount;   /* API level ? */
         jmethodID getTrackFormat;  /* API level ? */
         jmethodID selectTrack;     /* API level ? */
@@ -395,6 +397,12 @@ static const struct {
 	 offsetof(struct mcw_jni, MediaCodec.clazz),
 	 offsetof(struct mcw_jni, MediaCodec.releaseOutputBufferAtTime),
 	 0},
+	{MCW_JNI_MEMBER_TYPE_METHOD,
+	 "setVideoScalingMode",
+	 "(I)V",
+	 offsetof(struct mcw_jni, MediaCodec.clazz),
+	 offsetof(struct mcw_jni, MediaCodec.setVideoScalingMode),
+	 1},
 
 	 //mediaExtractor method init
     {MCW_JNI_MEMBER_TYPE_METHOD,
@@ -409,6 +417,12 @@ static const struct {
 			offsetof(struct mcw_jni, MediaExtractor.clazz),
 			offsetof(struct mcw_jni, MediaExtractor.setDataSource),
 			1},
+	{MCW_JNI_MEMBER_TYPE_METHOD,
+				"setDataSource",
+				"(Ljava/io/FileDescriptor;JJ)V",
+				offsetof(struct mcw_jni, MediaExtractor.clazz),
+				offsetof(struct mcw_jni, MediaExtractor.setDataSourceFd),
+				0},
 	{MCW_JNI_MEMBER_TYPE_METHOD,
 			"getTrackCount",
 			"()I",
@@ -2336,6 +2350,36 @@ mcw_jni_mediacodec_release_output_buffer_at_time(struct mcw_mediacodec *codec,
 }
 
 
+void mcw_jni_set_video_scaling_mode(struct mcw_mediacodec *codec,int mode){
+	struct mcw_jni_mediacodec *mc = (struct mcw_jni_mediacodec *)codec;
+	enum mcw_media_status ret;
+	bool attached = false;
+	JNIEnv *env = NULL;
+
+	if (!mc) {
+		LOGE("invalid codec parameter");
+		ret = MCW_MEDIA_STATUS_ERROR_UNKNOWN;
+		return;
+	}
+
+	attached = mcw_jni_attach_and_get_env(&env);
+
+	env->CallVoidMethod(
+			mc->mediacodec,
+			mcw_jni.MediaCodec.setVideoScalingMode,
+			(jint)mode);
+
+	if (env->ExceptionCheck()) {
+		env->ExceptionDescribe();
+		env->ExceptionClear();
+		ret = MCW_MEDIA_STATUS_ERROR_UNKNOWN;
+	} else
+		ret = MCW_MEDIA_STATUS_OK;
+
+	mcw_jni_detach(attached);
+}
+
+
 //mediaExtractor
 struct mcw_mediaExtractor*  mcw_jni_mediaExtractor_nnew(){
     int error = 0;
@@ -2433,6 +2477,64 @@ void mcw_jni_mediaExtractor_set_data_source(mcw_mediaExtractor* extractor,const 
 		ret = MCW_MEDIA_STATUS_OK;
 
 	mcw_jni_detach(attached);
+}
+
+jobject createFileDescriptorObject(JNIEnv *env,int descriptor){
+	jclass clazz = env->FindClass("java/io/FileDescriptor");
+	//发现私有带参数构造函数无法调用
+	jmethodID creator = env->GetMethodID(clazz,"<init>","()V");
+	jobject object = env->NewObject(clazz,creator);
+	//方式一：调用setInt$，setInt$ 是一个被hide的public方法，这样调用仍然有效
+	jmethodID set = env->GetMethodID(clazz,"setInt$","(I)V");
+	env->CallVoidMethod(object,set,descriptor);
+	//方式二：直接修改字段值
+	//jfieldID fieldDescriptor = env->GetFieldID(clazz,"descriptor","I");
+	//env->SetLongField(object,fieldDescriptor,descriptor);
+	return object;
+}
+
+void mcw_jni_mediaExtractor_set_data_source_fd(mcw_mediaExtractor* extractor,int descriptor, int64_t offset, int64_t length){
+    struct mcw_jni_mediaExtractor *mt = (struct mcw_jni_mediaExtractor *)extractor;
+    enum mcw_media_status ret;
+    bool attached = false;
+    jobject descriptorObject = nullptr;
+    JNIEnv *env = NULL;
+
+    if (!mt) {
+        ret = MCW_MEDIA_STATUS_ERROR_UNKNOWN;
+        LOGE("invalid Extractor parameter");
+        return ;
+    }
+
+    attached = mcw_jni_attach_and_get_env(&env);
+
+	descriptorObject = createFileDescriptorObject(env,descriptor);
+	if(descriptorObject == nullptr){
+		ret = MCW_MEDIA_STATUS_ERROR_UNKNOWN;
+		LOGE("create descriptor object failed!!!");
+		return ;
+	}
+
+    env->CallVoidMethod(
+            mt->mediaExtractor,
+            mcw_jni.MediaExtractor.setDataSourceFd,
+			descriptorObject,
+            (jlong)offset,
+            (jlong)length
+            );
+
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        ret = MCW_MEDIA_STATUS_ERROR_UNKNOWN;
+    } else
+        ret = MCW_MEDIA_STATUS_OK;
+
+    if(descriptorObject){
+		env->DeleteLocalRef(descriptorObject);
+    }
+
+    mcw_jni_detach(attached);
 }
 
 size_t mcw_jni_mediaExtractor_get_track_count(mcw_mediaExtractor* extractor){
@@ -2777,6 +2879,7 @@ int mcw_jni_init(struct mcw *mcw, void *jvm)
 end:
     LOGD("[jni_init] end...");
 	mcw->implem = MCW_IMPLEMENTATION_JNI;
+	//MediaFormat
 	mcw->mediaformat.nnew = mcw_jni_mediaformat_new;
     mcw->mediaformat.create_video_format = mcw_jni_create_video_format;
 	mcw->mediaformat.ddelete = mcw_jni_mediaformat_delete;
@@ -2825,9 +2928,10 @@ end:
 	mcw->mediaformat.KEY_SAMPLE_RATE = mcw_jni_mediaformat_KEY_SAMPLE_RATE;
 	mcw->mediaformat.KEY_WIDTH = mcw_jni_mediaformat_KEY_WIDTH;
 	mcw->mediaformat.KEY_STRIDE = mcw_jni_mediaformat_KEY_STRIDE;
+
+	//MediaCodec
 	mcw->mediacodec.create_codec_by_name =
 		mcw_jni_mediacodec_create_codec_by_name;
-    LOGD("[jni_init] pointer -> create_decoder_by_type...");
 	mcw->mediacodec.create_decoder_by_type =
 		mcw_jni_mediacodec_create_decoder_by_type;
 	mcw->mediacodec.create_encoder_by_type =
@@ -2852,10 +2956,12 @@ end:
 		mcw_jni_mediacodec_release_output_buffer;
 	mcw->mediacodec.release_output_buffer_at_time =
 		mcw_jni_mediacodec_release_output_buffer_at_time;
+	mcw->mediacodec.set_video_scaling_mode = mcw_jni_set_video_scaling_mode;
 
 	//mediaExtractor
     mcw->mediaExtractor.nnew = mcw_jni_mediaExtractor_nnew;
     mcw->mediaExtractor.set_data_source = mcw_jni_mediaExtractor_set_data_source;
+    mcw->mediaExtractor.set_data_source_fd = mcw_jni_mediaExtractor_set_data_source_fd;
     mcw->mediaExtractor.get_track_count = mcw_jni_mediaExtractor_get_track_count;
     mcw->mediaExtractor.get_track_format = mcw_jni_mediaExtractor_get_track_format;
     mcw->mediaExtractor.select_track = mcw_jni_mediaExtractor_select_track;

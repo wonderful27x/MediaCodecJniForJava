@@ -181,6 +181,7 @@ static struct mcw_ndk {
 	struct{
 		struct AMediaExtractor* (*nnew)();
 		void (*setDataSource)(AMediaExtractor* extractor,const char* path);
+        void (*setDataSourceFd)(AMediaExtractor* extractor,int descriptor, off64_t offset, off64_t length);
 		size_t (*getTrackCount)(AMediaExtractor* extractor);
 		struct AMediaFormat* (*getTrackFormat)(AMediaExtractor* extractor,size_t index);
 		void (*selectTrack)(AMediaExtractor* extractor,size_t index);
@@ -197,6 +198,7 @@ static const struct {
 	const char *name;
 	int offset;
 } mcw_ndk_sym[] = {
+    //MediaFormat
 	{"AMediaFormat_new", offsetof(struct mcw_ndk, AMediaFormat.nnew)},
 	{"AMediaFormat_delete", offsetof(struct mcw_ndk, AMediaFormat.ddelete)},
 	{"AMediaFormat_toString",
@@ -271,6 +273,7 @@ static const struct {
 	{"AMEDIAFORMAT_KEY_STRIDE",
 	 offsetof(struct mcw_ndk, AMediaFormat.KEY_STRIDE)},
 
+	//MediaCodec
 	{"AMediaCodec_createCodecByName",
 	 offsetof(struct mcw_ndk, AMediaCodec.createCodecByName)},
 	{"AMediaCodec_createDecoderByType",
@@ -303,6 +306,7 @@ static const struct {
 	//mediaExtractor
 	{"AMediaExtractor_new",offsetof(struct mcw_ndk, AMediaExtractor.nnew)},
 	{"AMediaExtractor_setDataSource",offsetof(struct mcw_ndk, AMediaExtractor.setDataSource)},
+    {"AMediaExtractor_setDataSourceFd",offsetof(struct mcw_ndk, AMediaExtractor.setDataSourceFd)},
 	{"AMediaExtractor_getTrackCount",offsetof(struct mcw_ndk, AMediaExtractor.getTrackCount)},
 	{"AMediaExtractor_getTrackFormat",offsetof(struct mcw_ndk, AMediaExtractor.getTrackFormat)},
 	{"AMediaExtractor_selectTrack",offsetof(struct mcw_ndk, AMediaExtractor.selectTrack)},
@@ -666,6 +670,10 @@ mcw_ndk_mediacodec_release_output_buffer_at_time(struct mcw_mediacodec *codec,
 	return mcw_ndk_map_status(status);
 }
 
+void mcw_ndk_set_video_scaling_mode(struct mcw_mediacodec *codec,int mode){
+    LOGE("error: the method -> setVideoScalingMode is not support in ndk !!!");
+}
+
 
 struct mcw_mediaExtractor* mcw_ndk_mediaExtractor_nnew(){
 	return (struct mcw_mediaExtractor*) mcw_ndk.AMediaExtractor.nnew();
@@ -673,6 +681,11 @@ struct mcw_mediaExtractor* mcw_ndk_mediaExtractor_nnew(){
 
 void mcw_ndk_mediaExtractor_set_data_source(mcw_mediaExtractor* extractor,const char* path){
 	mcw_ndk.AMediaExtractor.setDataSource((AMediaExtractor*)extractor,path);
+}
+
+void mcw_ndk_mediaExtractor_set_data_source_fd(mcw_mediaExtractor* extractor,int descriptor, int64_t offset, int64_t length){
+    LOGI("[ndk_set_data_source_fd] offset %lld length %lld", offset,length);
+    mcw_ndk.AMediaExtractor.setDataSourceFd((AMediaExtractor*)extractor,descriptor,(off64_t)offset,(off64_t)length);
 }
 
 size_t mcw_ndk_mediaExtractor_get_track_count(mcw_mediaExtractor* extractor){
@@ -757,6 +770,7 @@ int mcw_ndk_init(struct mcw *mcw,void *jvm)
 end:
 	LOGI("[ndk_init] end...");
 	mcw->implem = MCW_IMPLEMENTATION_NDK;
+	//MediaFormat
 	mcw->mediaformat.nnew = mcw_ndk_mediaformat_new;
     mcw->mediaformat.create_video_format = mcw_ndk_create_video_format;
 	mcw->mediaformat.ddelete = mcw_ndk_mediaformat_delete;
@@ -807,6 +821,8 @@ end:
 		*mcw_ndk.AMediaFormat.KEY_SAMPLE_RATE;
 	mcw->mediaformat.KEY_WIDTH = *mcw_ndk.AMediaFormat.KEY_WIDTH;
 	mcw->mediaformat.KEY_STRIDE = *mcw_ndk.AMediaFormat.KEY_STRIDE;
+
+	//MediaCodec
 	mcw->mediacodec.create_codec_by_name =
 		mcw_ndk_mediacodec_create_codec_by_name;
 	mcw->mediacodec.create_decoder_by_type =
@@ -833,10 +849,12 @@ end:
 		mcw_ndk_mediacodec_release_output_buffer;
 	mcw->mediacodec.release_output_buffer_at_time =
 		mcw_ndk_mediacodec_release_output_buffer_at_time;
+	mcw->mediacodec.set_video_scaling_mode = mcw_ndk_set_video_scaling_mode;
 
 	//mediaExtractor
 	mcw->mediaExtractor.nnew = mcw_ndk_mediaExtractor_nnew;
 	mcw->mediaExtractor.set_data_source = mcw_ndk_mediaExtractor_set_data_source;
+	mcw->mediaExtractor.set_data_source_fd = mcw_ndk_mediaExtractor_set_data_source_fd;
 	mcw->mediaExtractor.get_track_count = mcw_ndk_mediaExtractor_get_track_count;
 	mcw->mediaExtractor.get_track_format = mcw_ndk_mediaExtractor_get_track_format;
 	mcw->mediaExtractor.select_track = mcw_ndk_mediaExtractor_select_track;

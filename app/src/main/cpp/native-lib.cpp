@@ -51,8 +51,14 @@ extern "C" {
     }
     bool running = true;
 
+    int getDescriptor(JNIEnv *env,jobject assetManager,const char* name,off_t * offset,off_t* length){
+        AAssetManager* aAssetManager = AAssetManager_fromJava(env,assetManager);
+        AAsset* asset = AAssetManager_open(aAssetManager,name,0);
+        return AAsset_openFileDescriptor(asset,offset,length);
+    }
+
     JNIEXPORT void JNICALL
-    Java_com_example_mediacodecjava_MainActivity_playVideo(JNIEnv *env, jobject thiz, jobject surface,
+    Java_com_example_mediacodecjava_MainActivity_playVideo(JNIEnv *env, jobject thiz, jobject surface,jobject assetManager,
                                                            jstring path) {
         // TODO: implement playVideo()
 
@@ -69,7 +75,22 @@ extern "C" {
 
         //setDataSource
         const char *dataPath = env->GetStringUTFChars(path, 0);
-        mcwMedia->mediaExtractor.set_data_source(extractor, dataPath);
+
+        if (!strncmp(dataPath, "/", 1)) {
+            mcwMedia->mediaExtractor.set_data_source(extractor, dataPath);
+        } else{
+            int descriptor;
+            off_t offset,length;
+            descriptor = getDescriptor(env,assetManager,dataPath,&offset,&length);
+            LOGD("[JNI CODEC] set_data_source from assets: %s,%d,%ld,%ld",dataPath,descriptor,offset,length);
+            if(descriptor <0){
+                LOGE("failed to open file from assets: %s %d (%s)", dataPath, descriptor, strerror(errno));
+                return;
+            }
+            mcwMedia->mediaExtractor.set_data_source_fd(extractor,descriptor,offset,length);
+            close(descriptor);
+        }
+
         env->ReleaseStringUTFChars(path, dataPath);
 
         //init codec from track format
@@ -290,7 +311,7 @@ extern "C" {
 
     JNIEXPORT void JNICALL
     Java_com_example_mediacodecjava_MainActivity_playVideoThread(JNIEnv *env, jobject thiz,
-                                                                 jobject surface, jstring path) {
+                                                                 jobject surface,jobject assetManager, jstring path) {
         // TODO: implement playVideoThread()
 
         //init
@@ -303,26 +324,48 @@ extern "C" {
         //setDataSource
         const char *dataPath = env->GetStringUTFChars(path, 0);
         LOGD("[JNI CODEC] set_data_source...");
-        mcwMedia->mediaExtractor.set_data_source(extractor, dataPath);
+        if (!strncmp(dataPath, "/", 1)) {
+            LOGD("[JNI CODEC] set_data_source from sdcard: %s",dataPath);
+            mcwMedia->mediaExtractor.set_data_source(extractor, dataPath);
+        } else{
+            LOGD("[JNI CODEC] set_data_source from assets: %s",dataPath);
+            int descriptor;
+            off_t offset,length;
+            descriptor = getDescriptor(env,assetManager,dataPath,&offset,&length);
+            LOGD("[JNI CODEC] set_data_source from assets: %s,%d,%ld,%ld",dataPath,descriptor,offset,length);
+            if(descriptor <0){
+                LOGE("failed to open file from assets: %s %d (%s)", dataPath, descriptor, strerror(errno));
+                return;
+            }
+            mcwMedia->mediaExtractor.set_data_source_fd(extractor,descriptor,offset,length);
+            close(descriptor);
+        }
         env->ReleaseStringUTFChars(path, dataPath);
 
         //init codec from track format
         int trackCount = mcwMedia->mediaExtractor.get_track_count(extractor);
         LOGD("[JNI CODEC] trackCount: %d", trackCount);
         for (int i = 0; i < trackCount; ++i) {
+            LOGD("[JNI CODEC] get_track_format from track: %d", i);
             mcwFormat = mcwMedia->mediaExtractor.get_track_format(extractor, i);
+            if(mcwFormat == nullptr){
+                LOGE("[JNI CODEC] failed to get_track_format !!!");
+                return;
+            }
+            LOGD("[JNI CODEC] get_track_format ok");
+            LOGD("[JNI CODEC] mediaFormat: %s", mcwMedia->mediaformat.to_string(mcwFormat));
             const char *mime;
             mcwMedia->mediaformat.get_string(mcwFormat, mcwMedia->mediaformat.KEY_MIME, &mime);
             LOGD("[JNI CODEC] mediaFormat-mime: %s", mime);
-            LOGD("[JNI CODEC] mediaFormat: %s", mcwMedia->mediaformat.to_string(mcwFormat));
 
             string parameter = getFormatParameters("csd-0");
             LOGD("[JNI CODEC] csd0: %s",parameter.c_str());
             //parameter = getFormatParameters("csd-1");
             //LOGD("[JNI CODEC] csd1: %s",parameter.c_str());
 
-            //TEST
+            //TEST ADDED API
             mcwMedia->mediaformat.create_video_format(mime,100,200);
+            mcwMedia->mediacodec.set_video_scaling_mode(codec,VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING);
 
             if (!strncmp(mime, "video/", 6)) {
                 mcwMedia->mediaExtractor.select_track(extractor, i);
