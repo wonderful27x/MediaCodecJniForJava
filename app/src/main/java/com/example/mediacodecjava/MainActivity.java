@@ -3,6 +3,7 @@ package com.example.mediacodecjava;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import android.Manifest;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.AssetManager;
 import android.media.MediaCodecInfo;
@@ -14,6 +15,7 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.Window;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -39,12 +41,13 @@ public class MainActivity extends AppCompatActivity{
 
     private static final String TAG = "MainActivity";
 
-    private PlayerThread playerThread;
     private SurfaceView surfaceView;
     private Button play;
+    private Button playFull;
 
     private SurfaceView surfaceViewJni;
     private Button playJni;
+    private Button playJniFull;
 
     private EditText customAddress;
     private ReSpinner history;
@@ -71,14 +74,13 @@ public class MainActivity extends AppCompatActivity{
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.activity_main);
 
         permission();
 
         mediaCodecInfo();
 
-        surfaceView = findViewById(R.id.surface);
-        play = findViewById(R.id.play);
         customAddress = findViewById(R.id.customAddress);
         history = findViewById(R.id.history);
 
@@ -88,6 +90,9 @@ public class MainActivity extends AppCompatActivity{
         spinnerAdapter = new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,historyList);
         history.setAdapter(spinnerAdapter);
 
+        surfaceView = findViewById(R.id.surface);
+        play = findViewById(R.id.play);
+        playFull = findViewById(R.id.playFull);
         history.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
@@ -100,38 +105,28 @@ public class MainActivity extends AppCompatActivity{
             }
         });
 
-        surfaceView.getHolder().addCallback(new SurfaceHolder.Callback() {
-            @Override
-            public void surfaceCreated(@NonNull SurfaceHolder holder) {
-
-            }
-
-            @Override
-            public void surfaceChanged(@NonNull SurfaceHolder holder, int format, int width, int height) {
-                if (playerThread == null){
-                    playerThread = new PlayerThread();
-                }
-            }
-
-            @Override
-            public void surfaceDestroyed(@NonNull SurfaceHolder holder) {
-                if (playerThread != null){
-                    playerThread.interrupt();
-                }
-            }
-        });
         play.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 historySave(true,customAddress.getText().toString());
-                playerThread.start();
+                new Thread(){
+                    @Override
+                    public void run() {
+                        playVideo(surfaceView.getHolder().getSurface(),getResources().getAssets(),customAddress.getText().toString());
+                    }
+                }.start();
+            }
+        });
+        playFull.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                jumpToFullPlayActivity(customAddress.getText().toString(),0);
             }
         });
 
-
-
         surfaceViewJni = findViewById(R.id.surfaceJni);
         playJni = findViewById(R.id.playJni);
+        playJniFull = findViewById(R.id.playJniFull);
         playJni.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -139,9 +134,23 @@ public class MainActivity extends AppCompatActivity{
                 playVideoThread(surfaceViewJni.getHolder().getSurface(),getResources().getAssets(),customAddress.getText().toString());
             }
         });
+        playJniFull.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                jumpToFullPlayActivity(customAddress.getText().toString(),1);
+            }
+        });
 
         play.requestFocus();
 
+    }
+
+
+    private void jumpToFullPlayActivity(String path,int mode){
+        Intent intent = new Intent(this,PlayActivity.class);
+        intent.putExtra("path", path);
+        intent.putExtra("mode", mode);
+        startActivity(intent);
     }
 
 
@@ -205,14 +214,6 @@ public class MainActivity extends AppCompatActivity{
         }
     }
 
-
-    class PlayerThread extends Thread{
-
-        @Override
-        public void run() {
-            playVideo(surfaceView.getHolder().getSurface(),getResources().getAssets(),customAddress.getText().toString());
-        }
-    }
 
     @Override
     protected void onDestroy() {

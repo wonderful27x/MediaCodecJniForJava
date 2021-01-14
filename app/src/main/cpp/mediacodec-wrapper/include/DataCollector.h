@@ -28,6 +28,8 @@ public:
 
     virtual const char* takeSample();
 
+    string fetchPeriodInfo();
+
     void turnOn();
 
     void turnOff();

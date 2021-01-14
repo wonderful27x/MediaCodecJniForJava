@@ -96,6 +96,10 @@ public:
         return delayPeriodInfo;
     }
 
+    string fetchDelayPeriodInfo(){
+        return delayPeriodInfo;
+    }
+
 private:
     int64_t delayTimeStart = 0;                  //时延起始时间
     int64_t delayTimeEnd = 0;                    //时延终止时间

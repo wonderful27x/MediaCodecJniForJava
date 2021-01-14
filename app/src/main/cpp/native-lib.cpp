@@ -24,7 +24,6 @@ static JavaVM *mJavaVM = NULL;
 DataCollector* dataCollector = new DataCollector("codec");
 MediaDataCollector* mediaDataCollector = new MediaDataCollector("codec");
 
-
 extern "C" {
 
     jint JNI_OnLoad(JavaVM *vm, void * /*reserved*/) {
@@ -41,6 +40,23 @@ extern "C" {
 
     void JNI_OnUnload(JavaVM *vm, void * /*reserved*/) {
         mJavaVM = NULL;
+    }
+
+    jmethodID statusId;
+    jobject object = nullptr;
+    void callStatus(const char* info){
+        if(object == nullptr)return;
+
+        JNIEnv* jniEnv;
+        jint attach = mJavaVM->AttachCurrentThread(&jniEnv,NULL);
+        if(attach != JNI_OK)return;
+        jstring stringInfo = jniEnv->NewStringUTF(info);
+        jniEnv->CallVoidMethod(object,statusId,stringInfo);
+        if (stringInfo){
+            jniEnv->DeleteLocalRef(stringInfo);
+        }
+
+        //mJavaVM->DetachCurrentThread();
     }
 
 
@@ -123,6 +139,7 @@ extern "C" {
             const char* info = dataCollector->takeSample();
             if(info != nullptr){
                 LOGD("DECODE INFO: %s",info);
+                callStatus(dataCollector->fetchPeriodInfo().c_str());
             }
 
             //read the data and queue
@@ -203,6 +220,7 @@ extern "C" {
             const char* info = mediaDataCollector->takeSample();
             if(info != nullptr){
                 LOGD("DECODE INFO: %s",info);
+                callStatus(mediaDataCollector->fetchPeriodInfo().c_str());
             }
 
             //read the data and queue
@@ -395,5 +413,24 @@ extern "C" {
         // TODO: implement stop()
         running = false;
     }
+
+}extern "C"
+JNIEXPORT void JNICALL
+Java_com_example_mediacodecjava_PlayActivity_playFull(JNIEnv *env, jobject thiz, jobject surface,
+                                                      jobject asset_manager, jstring path,
+                                                      jint mode) {
+    // TODO: implement playFull()
+
+    jclass clazz = env->GetObjectClass(thiz);
+    statusId = env->GetMethodID(clazz,"updateStatus","(Ljava/lang/String;)V");
+    object = env->NewGlobalRef(thiz);
+    env->CallVoidMethod(thiz,statusId,env->NewStringUTF("MediaCodec"));
+
+    if(mode == 0){
+        Java_com_example_mediacodecjava_MainActivity_playVideo(env,thiz,surface,asset_manager,path);
+    } else{
+        Java_com_example_mediacodecjava_MainActivity_playVideoThread(env,thiz,surface,asset_manager,path);
+    }
+
 
 }
